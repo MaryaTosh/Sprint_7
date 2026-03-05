@@ -1,93 +1,55 @@
-import io.qameta.allure.Step;
 import io.qameta.allure.restassured.AllureRestAssured;
 import io.restassured.RestAssured;
 import io.restassured.response.Response;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import java.util.HashMap;
+import java.util.Map;
 
-import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class MakeOrderTest {
-    private String login = "balerina";
-    private final String password = "capuchina";
+
+    private CourierApi courierApi;
+    private api.OrderApi orderApi;
     private Integer courierId;
+    private String login;
+    private final String password = "capuchina";
 
     @BeforeEach
     void setUp() {
-        RestAssured.filters(new AllureRestAssured());
         RestAssured.baseURI = "https://qa-scooter.praktikum-services.ru";
+        RestAssured.filters(new AllureRestAssured());
+
+        courierApi = new CourierApi();
+        orderApi = new api.OrderApi();
+
         login = "balerina_" + System.currentTimeMillis();
-        String json = "{ \"login\": \"" + login + "\", " +
-                "\"password\": \"" + password + "\", " +
-                "\"firstName\": \"volochkova\" }";
-
-        given()
-                .header("Content-type", "application/json")
-                .body(json)
-                .when()
-                .post("/api/v1/courier")
-                .then()
-                .statusCode(201);
-        Response loginResponse =
-                given()
-                        .header("Content-type", "application/json")
-                        .body("{\"login\":\"" + login + "\", " +
-                                "\"password\":\"" + password + "\"}")
-                        .when()
-                        .post("/api/v1/courier/login")
-                        .then()
-                        .statusCode(200)
-                        .body("id", notNullValue())
-                        .extract()
-                        .response();
-
-        courierId = loginResponse.path("id");
+        courierApi.createCourier(login, password, "volochkova").then().statusCode(201);
+        courierId = courierApi.loginAndGetId(login, password);
     }
 
     @AfterEach
     void tearDown() {
         if (courierId != null) {
-            given()
-                    .pathParam("id", courierId)
-                    .when()
-                    .delete("/api/v1/courier/{id}")
-                    .then()
-                    .statusCode(200);
+            courierApi.deleteCourier(courierId).then().statusCode(200);
         }
     }
 
+    @Test
+    @DisplayName("Успешное создание заказа возвращает track")
+    void createOrderSuccessfully() {
+        Map<String, Object> orderData = createOrderMap("Ivan", "Pupkin",
+                "Москва, Просторная 4, 2", 4, "+7 999 999-99-99",
+                1, "2026-03-01", "Aloha");
 
-        @Test
-        @DisplayName("Успешное создание заказа возвращает track")
-        @Step("Создание заказа с валидными данными")
-        public void createOrderSuccessfully() {
-            String orderBody = "{ " +
-                    "  \"firstName\": \"Ivan\", " +
-                    "  \"lastName\": \"Pupkin\", " +
-                    "  \"address\": \"Москва, Простарная 4, 2\", " +
-                    "  \"metroStation\": 4, " +
-                    "  \"phone\": \"+7 999 999-99-99\", " +
-                    "  \"rentTime\": 1, " +
-                    "  \"deliveryDate\": \"2026-03-01\", " +
-                    "  \"comment\": \"Aloha\" " +
-                    "}";
-
-            Response response =
-                    given()
-                            .header("Content-Type", "application/json")
-                            .body(orderBody)
-                            .when()
-                            .post("/api/v1/orders");
-            response.then().assertThat().body("track", notNullValue())
-                    .and()
-                    .statusCode(201);
-
-        }
+        Response response = orderApi.createOrderWithMap(orderData);
+        response.then()
+                .statusCode(201)
+                .body("track", notNullValue());
+    }
 
     @ParameterizedTest
     @DisplayName("Создание заказа с разными цветами самоката")
@@ -97,27 +59,51 @@ public class MakeOrderTest {
             "[\"BLACK\", \"GREY\"]"
     })
     void createOrderWithDifferentColors(String colorJson) {
-        String orderBody = "{ " +
-                "  \"firstName\": \"Ivan\", " +
-                "  \"lastName\": \"Pupkin\", " +
-                "  \"address\": \"Москва, Простарная 4, 2\", " +
-                "  \"metroStation\": 4, " +
-                "  \"phone\": \"+7 999 999-99-99\", " +
-                "  \"rentTime\": 1, " +
-                "  \"deliveryDate\": \"2026-03-01\", " +
-                "  \"color\": " + colorJson + ", " +
-                "  \"comment\": \"Parameterized\" " +
-                "}";
+        String[] colors;
+        if ("[]".equals(colorJson)) {
+            colors = new String[0];
+        } else {
 
-        given()
-                .header("Content-Type", "application/json")
-                .body(orderBody)
-                .when()
-                .post("/api/v1/orders")
-                .then()
+            String cleanColors = colorJson.replaceAll("[\\[\\]\"]", "");
+            if (cleanColors.isEmpty()) {
+                colors = null;
+            } else {
+                colors = cleanColors.split(",");
+            }
+        }
+
+        Map<String, Object> orderData = createOrderMap("Ivan", "Pupkin",
+                "Москва, Просторная 4, 2", 4, "+7 999 999-99-99",
+                1, "2026-03-01", "Parameterized " + colorJson, colors);
+
+        Response response = orderApi.createOrderWithMap(orderData);
+        response.then()
                 .statusCode(201)
                 .body("track", notNullValue());
     }
+
+    private Map<String, Object> createOrderMap(String firstName, String lastName,
+                                               String address, int metroStation, String phone, int rentTime,
+                                               String deliveryDate, String comment) {
+        Map<String, Object> order = new HashMap<>();
+        order.put("firstName", firstName);
+        order.put("lastName", lastName);
+        order.put("address", address);
+        order.put("metroStation", metroStation);
+        order.put("phone", phone);
+        order.put("rentTime", rentTime);
+        order.put("deliveryDate", deliveryDate);
+        order.put("comment", comment);
+        order.put("color", null);  // По умолчанию без цветов
+        return order;
+    }
+
+    private Map<String, Object> createOrderMap(String firstName, String lastName,
+                                               String address, int metroStation, String phone, int rentTime,
+                                               String deliveryDate, String comment, String[] colors) {
+        Map<String, Object> order = createOrderMap(firstName, lastName, address, metroStation,
+                phone, rentTime, deliveryDate, comment);
+        order.put("color", colors);
+        return order;
+    }
 }
-
-
