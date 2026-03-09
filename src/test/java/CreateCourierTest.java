@@ -1,27 +1,26 @@
-import io.qameta.allure.restassured.AllureRestAssured;
-import io.restassured.RestAssured;
+import api.BaseTest;
+import api.CourierApi;
+import static org.apache.http.HttpStatus.*;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.*;
 import static org.hamcrest.Matchers.*;
 
-public class CreateCourierTest {
+public class CreateCourierTest extends BaseTest {
 
-    private CourierApi courierApi;
-    private Integer courierId;
+        private CourierApi courierApi;
+        private Integer courierId;
 
-    @BeforeEach
-    void setUp() {
-        RestAssured.baseURI = "https://qa-scooter.praktikum-services.ru";
-        RestAssured.filters(new AllureRestAssured());
-        courierApi = new CourierApi();
-    }
-
-    @AfterEach
-    void tearDown() {
-        if (courierId != null) {
-            courierApi.deleteCourier(courierId).then().statusCode(200);
+        @BeforeEach
+        void setUp() {
+            courierApi = new CourierApi();
         }
-    }
+
+        @AfterEach
+        void tearDown() {
+            if (courierId != null) {
+                courierApi.deleteCourier(courierId).then().statusCode(SC_OK);
+            }
+        }
 
     @Test
     @DisplayName("Успешное создание курьера со всеми полями")
@@ -33,7 +32,7 @@ public class CreateCourierTest {
         Response response = courierApi.createCourier(login, password, firstName);
 
         response.then()
-                .statusCode(201)
+                .statusCode(SC_CREATED)
                 .body("ok", equalTo(true));
 
         courierId = courierApi.loginAndGetId(login, password);
@@ -45,8 +44,8 @@ public class CreateCourierTest {
         Response response = courierApi.createCourier(null, "capuchina", "volochkova");
 
         response.then()
-                .statusCode(400)
-        .body("message", equalTo("Недостаточно данных для создания учетной записи"));
+                .statusCode(SC_BAD_REQUEST)
+                .body("message", equalTo("Недостаточно данных для создания учетной записи"));
     }
 
     @Test
@@ -56,8 +55,8 @@ public class CreateCourierTest {
         Response response = courierApi.createCourier(login, null, "volochkova");
 
         response.then()
-                .statusCode(400)
-                .body("message", equalTo("Недостаточно данных для создания учетной записи"));;
+                .statusCode(SC_BAD_REQUEST)
+                .body("message", equalTo("Недостаточно данных для создания учетной записи"));
     }
 
     @Test
@@ -67,15 +66,14 @@ public class CreateCourierTest {
         String password = "capuchina";
         String firstName = "volochkova";
 
-        // Первый курьер создаётся
         courierApi.createCourier(login, password, firstName)
-                .then().statusCode(201);
+                .then().statusCode(SC_CREATED);
+
         courierId = courierApi.loginAndGetId(login, password);
 
-        // Второй с теми же данными — конфликт
         courierApi.createCourier(login, password, firstName)
                 .then()
-                .statusCode(409)
+                .statusCode(SC_CONFLICT)
                 .body("message", equalTo("Этот логин уже используется. Попробуйте другой."));
     }
 
@@ -86,15 +84,14 @@ public class CreateCourierTest {
         String password = "capuchina";
         String firstName = "volochkova";
 
-        // Первый курьер
         courierApi.createCourier(login, password, firstName)
-                .then().statusCode(201);
+                .then().statusCode(SC_CREATED);
+
         courierId = courierApi.loginAndGetId(login, password);
 
-        // Второй с тем же логином, но другим паролем/именем
         courierApi.createCourier(login, "Bobmardilo", "Crokodilo")
                 .then()
-                .statusCode(409)
+                .statusCode(SC_CONFLICT)
                 .body("message", equalTo("Этот логин уже используется. Попробуйте другой."));
     }
 }

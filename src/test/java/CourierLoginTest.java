@@ -1,11 +1,12 @@
-import io.qameta.allure.restassured.AllureRestAssured;
-import io.restassured.RestAssured;
+import api.BaseTest;
+import api.CourierApi;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.*;
-
 import static org.hamcrest.Matchers.*;
+import org.junit.jupiter.api.*;
+import static org.apache.http.HttpStatus.*;
 
-public class CourierLoginTest {
+public class CourierLoginTest extends BaseTest {
 
     private String login;
     private final String password = "capuchina";
@@ -14,25 +15,18 @@ public class CourierLoginTest {
 
     @BeforeEach
     void setUp() {
-        RestAssured.baseURI = "https://qa-scooter.praktikum-services.ru";
-
-        AllureRestAssured allureFilter = new AllureRestAssured();
-        RestAssured.filters(allureFilter);
-
         courierApi = new CourierApi();
         login = "balerina_" + System.currentTimeMillis();
 
-        Response createResponse = courierApi.createCourier(login, password, "volochkova");
-        createResponse.then().statusCode(201);
-
-//        courierId = courierApi.loginAndGetId(login, password);
+        // Создание курьера для всех тестов
+        courierApi.createCourier(login, password, "volochkova")
+                .then().statusCode(SC_CREATED);
     }
 
     @AfterEach
     void tearDown() {
         if (courierId != null) {
-            Response deleteResponse = courierApi.deleteCourier(courierId);
-            deleteResponse.then().statusCode(200);
+            courierApi.deleteCourier(courierId).then().statusCode(SC_OK);
         }
     }
 
@@ -42,7 +36,7 @@ public class CourierLoginTest {
         Response loginResponse = courierApi.loginCourier(login, password);
 
         loginResponse.then()
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body("id", notNullValue());
 
         courierId = loginResponse.path("id");
@@ -54,7 +48,7 @@ public class CourierLoginTest {
         Response loginResponse = courierApi.loginCourier(null, password);
 
         loginResponse.then()
-                .statusCode(400)
+                .statusCode(SC_BAD_REQUEST)
                 .body("message", equalTo("Недостаточно данных для входа"));
     }
 
@@ -64,27 +58,27 @@ public class CourierLoginTest {
         Response loginResponse = courierApi.loginCourier(login, null);
 
         loginResponse.then()
-                .statusCode(400)
+                .statusCode(SC_BAD_REQUEST)
                 .body("message", equalTo("Недостаточно данных для входа"));
     }
 
     @Test
     @DisplayName("Логин с неправильным паролем возвращает 404")
-    void loginShouldFailWithWrongPassword() {
+    public void loginShouldFailWithWrongPassword() {
         Response loginResponse = courierApi.loginCourier(login, "wrongPassword123");
 
         loginResponse.then()
-                .statusCode(404)
+                .statusCode(SC_NOT_FOUND)
                 .body("message", equalTo("Учетная запись не найдена"));
     }
 
     @Test
     @DisplayName("Логин с неправильным логином возвращает 404")
-    void loginShouldFailWithWrongLogin() {
+    public void loginShouldFailWithWrongLogin() {
         Response loginResponse = courierApi.loginCourier("none7485", password);
 
         loginResponse.then()
-                .statusCode(404)
+                .statusCode(SC_NOT_FOUND)
                 .body("message", equalTo("Учетная запись не найдена"));
     }
 }

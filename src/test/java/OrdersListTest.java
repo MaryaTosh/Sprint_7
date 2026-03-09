@@ -1,74 +1,69 @@
-import io.qameta.allure.restassured.AllureRestAssured;
-import io.restassured.RestAssured;
+import api.BaseTest;
 import io.restassured.response.Response;
+import api.OrderApi;
+import POJO.OrderCreateRequest;
 import org.junit.jupiter.api.*;
-
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.apache.http.HttpStatus.*;
 
-public class OrdersListTest {
-    private api.OrderApi orderApi;
+public class OrdersListTest extends BaseTest {
+
+    private OrderApi orderApi;
     private Integer track;
 
     @BeforeEach
     void setUp() {
-        RestAssured.baseURI = "https://qa-scooter.praktikum-services.ru";
-        RestAssured.filters(new AllureRestAssured());
+        orderApi = new OrderApi();
 
-        orderApi = new api.OrderApi();
+        OrderCreateRequest order = new OrderCreateRequest(
+                1,
+                2,
+                "Москва, Просторная 4, 2",
+                4,
+                79999999999L,
+                1,
+                "2026-03-10",
+                "Test order"
+        );
+        order.setColor(new String[]{"BLACK", "GREY"});  // Цвета
 
-        // Создаём заказ, чтобы был валидный track
-        Map<String, Object> orderData = new HashMap<>();
-        orderData.put("firstName", "Ivan");
-        orderData.put("lastName", "Pupkin");
-        orderData.put("address", "Москва, Просторная 4, 2");
-        orderData.put("metroStation", 4);
-        orderData.put("phone", "+7 999 999-99-99");
-        orderData.put("rentTime", 1);
-        orderData.put("deliveryDate", "2026-03-01");
-        orderData.put("comment", "Test order");
-        orderData.put("color", new String[]{"BLACK", "GREY"});
-
-        Response orderResponse = orderApi.createOrderWithMap(orderData);
-        orderResponse.then().statusCode(201);
+        Response orderResponse = orderApi.createOrder(order);
+        orderResponse.then().statusCode(SC_CREATED);
 
         track = orderResponse.path("track");
-        assertNotNull(track, "track не должен быть null");
+        Assertions.assertNotNull(track, "track не должен быть null");
     }
 
     @Test
     @DisplayName("Успешный запрос по существующему треку возвращает объект order")
-    void successfulRequestByTrackReturnsOrder() {
+    public void successfulRequestByTrackReturnsOrder() {  // public!
         Response response = orderApi.getOrderByTrack(track);
 
         response.then()
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body("order", notNullValue())
                 .body("order.track", equalTo(track));
     }
 
     @Test
     @DisplayName("Запрос без номера заказа возвращает 400 и сообщение об ошибке")
-    void requestWithoutTrackReturnsBadRequest() {
+    public void requestWithoutTrackReturnsBadRequest() {  // public!
         Response response = orderApi.getOrderWithoutTrack();
 
         response.then()
-                .statusCode(400)
+                .statusCode(SC_BAD_REQUEST)
                 .body("message", equalTo("Недостаточно данных для поиска"));
     }
 
     @Test
     @DisplayName("Запрос по несуществующему номеру возвращает 404 и сообщение об ошибке")
-    void requestWithNonExistingTrackReturnsNotFound() {
+    public void requestWithNonExistingTrackReturnsNotFound() {  // public!
         int nonExistingTrack = 999999999;
 
         Response response = orderApi.getOrderByTrack(nonExistingTrack);
 
         response.then()
-                .statusCode(404)
+                .statusCode(SC_NOT_FOUND)
                 .body("message", equalTo("Заказ не найден"));
     }
 }
